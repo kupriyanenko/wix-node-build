@@ -105,7 +105,8 @@ describe('Aggregator: Lint', () => {
 p {
   $color: #ff0;
   color: #ff0;
-}`;
+}
+`;
       const res = test
         .setup({
           'a.sass': goodStyle,
@@ -138,7 +139,7 @@ p {
         })
         .execute('lint', ['--client']);
 
-      expect(res.stdout).to.contain('✖  Expected no more than 1 empty line(s)   max-empty-lines');
+      expect(res.stdout).to.contain('Expected no more than 1 empty line(s)   max-empty-lines');
       expect(res.code).to.equal(1);
     });
 

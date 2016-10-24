@@ -19,8 +19,10 @@ describe('Loaders', () => {
       });
   });
 
+  afterEach(() => test.teardown(true));
+
   describe('Babel', () => {
-    beforeEach(() =>
+    it('should transpile according .babelrc file', () => {
       test
         .setup({
           'src/client.js': 'let aServerFunction = 1;',
@@ -32,20 +34,13 @@ describe('Loaders', () => {
             }
           }`
         }, [hooks.installDependencies])
-        .execute('build')
-    );
+        .execute('build');
 
-    afterEach(() => test.teardown());
-
-    it('should transpile according .babelrc file', () => {
       expect(test.content('dist/statics/app.bundle.js')).to.contain('var aServerFunction = 1;');
     });
   });
 
   describe('Typescript', () => {
-
-    afterEach(() => test.teardown());
-
     it('should transpile', () => {
       test
         .setup({
@@ -60,7 +55,6 @@ describe('Loaders', () => {
     });
 
     it('should fail with error code 1', () => {
-
       const resp = test
         .setup({
           'src/app.ts': 'function ()',
@@ -76,18 +70,16 @@ describe('Loaders', () => {
     });
   });
 
-
   describe('Sass', () => {
-    afterEach(() => test.teardown());
-
     describe('client', () => {
-      beforeEach(() => setupAndBuild());
-
       it('should run sass and css loaders over imported .scss files', () => {
-        expect(test.content('dist/statics/app.bundle.js')).to.match(/"some-rule":"some-css__some-rule__\w{5}",([\s\S]*?)"child":"some-css__child__\w{5}"/);
+        setupAndBuild();
+        expect(test.content('dist/statics/app.bundle.js')).to.match(
+          /"some-rule":"some-css__some-rule__\w{5}",([\s\S]*?)"child":"some-css__child__\w{5}"/);
       });
 
       it('should also expose css classes as camelcase', () => {
+        setupAndBuild();
         expect(test.content('dist/statics/app.bundle.js')).to.match(/"someRule":"some-css__some-rule__\w{5}"/);
       });
     });
@@ -123,8 +115,6 @@ describe('Loaders', () => {
   });
 
   describe('Images', () => {
-    afterEach(() => test.teardown());
-
     it('should embed image below 10kb as base64', () => {
       test
         .setup({
@@ -133,14 +123,15 @@ describe('Loaders', () => {
         })
         .execute('build');
 
-      expect(test.content('dist/statics/app.bundle.js')).to.contain('data:image/png;base64,c29tZS1jb250ZW50Cg==');
+      expect(test.content('dist/statics/app.bundle.js')).to.contain('data:image/png;base64,c29tZS1jb250ZW50');
     });
 
     it('should write a separate image above 10kb', () => {
       test
         .setup({
           'src/client.js': `require('./large-image.png');`,
-          'src/large-image.png': _.repeat('a', 10001)})
+          'src/large-image.png': _.repeat('a', 10001)
+        })
         .execute('build');
 
       expect(test.content('dist/statics/app.bundle.js')).to.match(/"large-image.png\?\w+"/);
@@ -148,17 +139,53 @@ describe('Loaders', () => {
   });
 
   describe('Json', () => {
-    beforeEach(() =>
+    it('should embed json file into bundle', () => {
       test
         .setup({
           'src/client.js': `require('./some.json')`,
           'src/some.json': '{"json-content": 42}'
         })
-        .execute('build')
-    );
+        .execute('build');
+      expect(test.content('dist/statics/app.bundle.js')).to.contain('"json-content": 42');
+    });
+  });
 
-    it('should embed json file into bundle', () =>
-      expect(test.content('dist/statics/app.bundle.js')).to.contain('"json-content": 42')
-    );
+  describe('Html', () => {
+    it('should provide html file', () => {
+      test
+        .setup({
+          'src/client.js': `require('./template.html')`,
+          'src/template.html': '<h2>Hello</h2><h2>Missy</h2>'
+        })
+        .execute('build');
+      expect(test.content('dist/statics/app.bundle.js')).to.contain('module.exports = "<h2>Hello</h2><h2>Missy</h2>";');
+    });
+
+    it('should provide html file with require image', () => {
+      test
+        .setup({
+          'src/client.js': `require('./template.html')`,
+          'src/template.html': '<h2>Hello</h2><img src="./image.gif"/>',
+          'src/image.gif': fx.gif()
+        })
+        .execute('build');
+      expect(test.content('dist/statics/app.bundle.js')).to.contain(`"<h2>Hello</h2><img src=\\"" + `);
+      expect(test.content('dist/statics/app.bundle.js')).to.contain(`data:image/gif;base64,${fx.gif('base64')}`);
+    });
+    it('should minimize html', () => {
+      test
+        .setup({
+          'src/client.js': `require('./template.html')`,
+          'src/template.html': '<h2>Hello</h2>                <span>world</span>    <p>!</p>',
+          'src/image.gif': fx.gif()
+        })
+        .execute('build');
+      expect(test.content('dist/statics/app.bundle.js'))
+        .to.contain('<h2>Hello</h2>                <span>world</span>    <p>!</p>');
+      expect(test.content('dist/statics/app.bundle.min.js'))
+        .to.contain('<h2>Hello</h2> <span>world</span> <p>!</p>');
+    });
+
+
   });
 });

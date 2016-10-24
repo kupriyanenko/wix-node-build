@@ -6,7 +6,8 @@ const _ = require('lodash');
 const autoprefixer = require('autoprefixer');
 const {mergeByConcat} = require('./../lib/utils');
 const webpackConfigCommon = require('./webpack.config.common');
-const {bundleEntry, separateCss} = require('./project');
+const {bundleEntry, separateCss, indexFile} = require('./project');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 const config = ({debug, hot} = {}) => {
   const entry = bundleEntry() || {app: './client'};
@@ -37,7 +38,9 @@ const config = ({debug, hot} = {}) => {
             warnings: true,
           },
         })
-      ]
+      ],
+
+      ...indexFile() ? getIndexPlugin(entry, indexFile()) : []
     ],
 
     output: {
@@ -67,6 +70,22 @@ const config = ({debug, hot} = {}) => {
     });
   }
 
+  function getIndexPlugin(entries, options) {
+    if (_.isString(options)) {
+      options = {template: options};
+    }
+    options = options || {};
+    const minSuffix = debug ? '' : '.min';
+    return Object.keys(entries)
+      .map(entryName => {
+        const substitute = tpl => tpl && tpl.replace(/\[name]/g, entryName);
+        return new HtmlWebpackPlugin(_.pickBy({ //  plugin uses _.extend, so we need to provide only non empty values
+          filename: `${entryName}${minSuffix}.html`,
+          chunks: options.chunks && _.map(options.chunks, substitute),
+          template: options.template && substitute(options.template)
+        }));
+      });
+  }
 };
 
 module.exports = config;

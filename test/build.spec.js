@@ -92,8 +92,7 @@ describe('Aggregator: Build', () => {
           'package.json': fx.packageJson(),
           'pom.xml': fx.pom()
         })
-        .execute(buildConst)
-      ;
+        .execute(buildConst);
 
       expect(resp.stdout).to.contain('Compiling with Babel');
       expect(resp.code).to.equal(0);
@@ -107,8 +106,8 @@ describe('Aggregator: Build', () => {
           'package.json': fx.packageJson(),
           'pom.xml': fx.pom()
         })
-        .execute(buildConst)
-      ;
+        .execute(buildConst);
+
       expect(resp.stdout).to.contain('Compiling with Babel');
       expect(resp.code).to.equal(0);
       expect(test.content('dist/src/a/a.js')).to.contain('const a = 1;');
@@ -123,8 +122,8 @@ describe('Aggregator: Build', () => {
           'package.json': fx.packageJson(),
           'pom.xml': fx.pom()
         })
-        .execute(buildConst)
-      ;
+        .execute(buildConst);
+
       expect(resp.code).to.equal(1);
       expect(resp.stdout).to.contain('Unexpected token (1:9)');
       expect(resp.stdout).to.contain('1 | function ()');
@@ -132,14 +131,14 @@ describe('Aggregator: Build', () => {
 
     it('should ignore dist/ and node_modules/ from being transpiled', () => {
       const resp = test
-          .setup({
-            'dist/a.js': 'function () {{}',
-            'node_modules/a.js': 'function () {{}',
-            'package.json': fx.packageJson(),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst)
-        ;
+        .setup({
+          'dist/a.js': 'function () {{}',
+          'node_modules/a.js': 'function () {{}',
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+
       expect(resp.code).to.equal(0);
       expect(test.content('dist/a.js')).to.equal('function () {{}');
       expect(test.contains('dist/node_modules')).to.be.false;
@@ -175,12 +174,12 @@ describe('Aggregator: Build', () => {
 
     it('should store transpilation output into file system cache', () => {
       const resp = test
-       .setup({
-         'src/foo.js': 'const foo = `bar`;',
-         'package.json': fx.packageJson(),
-         'pom.xml': fx.pom()
-       })
-       .execute(buildConst);
+        .setup({
+          'src/foo.js': 'const foo = `bar`;',
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(resp.code).to.equal(0);
       expect(test.list('.', '-RA')).to.contain('target/.babel-cache');
@@ -238,14 +237,15 @@ describe('Aggregator: Build', () => {
     it('should transpile only from the base folders', () => {
       const filesInFolders = baseFolders
         .reduce((result, dir) =>
-          Object.assign(result, {[`${dir}/a.ts`]: 'function(){}'})
-        , {});
+            Object.assign(result, {[`${dir}/a.ts`]: 'function(){}'})
+          , {});
 
-      test.setup(Object.assign({
-        'tsconfig.json': fx.tsconfig(),
-        'package.json': fx.packageJson(),
-        'pom.xml': fx.pom()
-      }, filesInFolders))
+      test
+        .setup(Object.assign({
+          'tsconfig.json': fx.tsconfig(),
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        }, filesInFolders))
         .execute(buildConst);
 
       expect(test.list('dist/').length).to.equal(baseFolders.length);
@@ -308,6 +308,140 @@ describe('Aggregator: Build', () => {
     });
   });
 
+  describe('Index File', () => {
+    const test = tp.create();
+    afterEach(() => test.teardown(true));
+
+    it('should generate index file', () => {
+      const resp = test
+        .setup({
+          'src/client.js': `const aFunction = require('./dep');const a = aFunction(1);`,
+          'src/dep.js': `module.exports = function(a){return a + 1;};`,
+          'package.json': fx.packageJson({index: true}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+      expect(resp.code).to.equal(0);
+      expect(resp.stderr.trim()).to.be.emtpy;
+      expect(test.content('dist/statics/app.html'))
+        .to.match(/^<!DOCTYPE html>\s*<html>\s*<head>[\s\S]*<\/head>\s*<body>[\s\S]*<\/body>\s*<\/html>$/);
+      expect(test.content('dist/statics/app.min.html'))
+        .to.match(/^<!DOCTYPE html>\s*<html>\s*<head>[\s\S]*<\/head>\s*<body>[\s\S]*<\/body>\s*<\/html>$/);
+      expect(test.content('dist/statics/app.min.html'))
+        .to.contain('<script type="text/javascript" src="app.bundle.min.js">');
+      expect(test.content('dist/statics/app.html'))
+        .to.contain('<script type="text/javascript" src="app.bundle.js">');
+
+      expect(test.content('dist/statics/app.html').split('<script ').length - 1).to.equal(1);
+      expect(test.content('dist/statics/app.min.html').split('<script ').length - 1).to.equal(1);
+    });
+
+    it('should generate index file with injected styles', () => {
+      const resp = test
+        .setup({
+          'src/client.js': `require('./client.scss');const aFunction = require('./dep'); const a = aFunction(1);`,
+          'src/client.scss': `body { background-color: lime; }`,
+          'src/dep.js': `module.exports = function(a){return a + 1;};`,
+          'package.json': fx.packageJson({index: true}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+      expect(resp.code).to.equal(0);
+      expect(resp.stderr.trim()).to.be.emtpy;
+      expect(test.content('dist/statics/app.min.html'))
+        .to.contain('<link href="app.min.css" rel="stylesheet">');
+      expect(test.content('dist/statics/app.html'))
+        .to.contain('<link href="app.css" rel="stylesheet">');
+
+      expect(test.content('dist/statics/app.html').split('<link ').length - 1).to.equal(1);
+      expect(test.content('dist/statics/app.min.html').split('<link ').length - 1).to.equal(1);
+    });
+
+    it('should generate index file with custom template', () => {
+      const resp = test
+        .setup({
+          'src/client.js': `console.log('src/client.js');`,
+          'src/index.ejs': `<html><head></head><body><span>Custom span</span></body></html>`,
+          'package.json': fx.packageJson({index: 'index.ejs'}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+      expect(resp.code).to.equal(0);
+      expect(resp.stderr.trim()).to.be.emtpy;
+      expect(test.content('dist/statics/app.min.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>Custom span</span><script type="text/javascript" src="app.bundle.min.js"></script>' +
+        '</body></html>');
+      expect(test.content('dist/statics/app.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>Custom span</span><script type="text/javascript" src="app.bundle.js"></script>' +
+        '</body></html>');
+    });
+
+
+    it('should generate index file with custom for each entry', () => {
+      const resp = test
+        .setup({
+          'src/app-settings/app-settings.js': `console.log('app-settings.js');`,
+          'src/app-settings/app-settings.ejs': `<html><head></head><body><span>app-settings</span></body></html>`,
+          'src/control-panel/control-panel.js': `console.log('control-panel.js');`,
+          'src/control-panel/control-panel.ejs': `<html><head></head><body><span>control-panel</span></body></html>`,
+          'package.json': fx.packageJson({
+            entry: {
+              'control-panel': ['./control-panel/control-panel.js'],
+              'app-settings': ['./app-settings/app-settings.js']
+            },
+            index: {
+              template: '[name]/[name].ejs',
+              chunks: ['[name]']
+            }
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+      expect(resp.code).to.equal(0);
+      expect(resp.stderr.trim()).to.be.emtpy;
+      expect(test.content('dist/statics/app-settings.min.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>app-settings</span>' +
+        '<script type="text/javascript" src="app-settings.bundle.min.js"></script>' +
+        '</body></html>');
+      expect(test.content('dist/statics/app-settings.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>app-settings</span>' +
+        '<script type="text/javascript" src="app-settings.bundle.js"></script>' +
+        '</body></html>');
+      expect(test.content('dist/statics/control-panel.min.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>control-panel</span>' +
+        '<script type="text/javascript" src="control-panel.bundle.min.js"></script>' +
+        '</body></html>');
+      expect(test.content('dist/statics/control-panel.html'))
+        .to.equal('<html><head></head><body>' +
+        '<span>control-panel</span>' +
+        '<script type="text/javascript" src="control-panel.bundle.js"></script>' +
+        '</body></html>');
+    });
+
+    it('should generate error if template has errros', () => {
+      const resp = test
+        .setup({
+          'src/client.js': `console.log('src/client.js');`,
+          'src/index.ejs': `<html><head></head><body><span><%= dontExist.getStaff() %></span></body></html>`,
+          'package.json': fx.packageJson({index: 'index.ejs'}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
+      expect(resp.code).to.equal(1);
+      expect(resp.stderr.trim()).to.be.emtpy;
+      expect(resp.stdout).to.contain('ReferenceError: dontExist is not defined');
+      expect(test.content('dist/statics/app.min.html'))
+        .to.contain('ReferenceError: dontExist is not defined');
+      expect(test.content('dist/statics/app.html'))
+        .to.contain('ReferenceError: dontExist is not defined');
+    });
+  });
+
   describe('Bundle', () => {
     const test = tp.create();
     afterEach(() => test.teardown());
@@ -330,29 +464,29 @@ describe('Aggregator: Build', () => {
 
     it('should fail with exit code 1', () => {
       const res = test
-          .setup({
-            'src/client.js': `const aFunction = require('./dep');const a = aFunction(1);`,
-            'src/dep.js': `module.exports = a => {`,
-            'package.json': fx.packageJson(),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': `const aFunction = require('./dep');const a = aFunction(1);`,
+          'src/dep.js': `module.exports = a => {`,
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(1);
-      expect(res.stdout).to.contain('Unexpected token (2:0)');
+      expect(res.stdout).to.contain('Unexpected token (1:23)');
     });
 
     it('should generate a bundle using different entry', () => {
       const res = test
-          .setup({
-            'src/app-final.js': `const aFunction = require('./dep');const a = aFunction(1);`,
-            'src/dep.js': `module.exports = function(a){return a + 1;};`,
-            'package.json': fx.packageJson({
-              entry: './app-final.js'
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/app-final.js': `const aFunction = require('./dep');const a = aFunction(1);`,
+          'src/dep.js': `module.exports = function(a){return a + 1;};`,
+          'package.json': fx.packageJson({
+            entry: './app-final.js'
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.list('dist/statics').indexOf('app.bundle.js')).to.be.at.least(0);
@@ -362,14 +496,14 @@ describe('Aggregator: Build', () => {
 
     it.skip('should generate a bundle using different entry and different context', () => {
       const res = test
-          .setup({
-            'app/app-final.js': `const aFunction = require('./dep');const a = aFunction(1);`,
-            'src/dep.js': `module.exports = function(a){return a + 1;};`,
-            'package.json': fx.packageJson({
-              entry: './app-final.js'
-            })
+        .setup({
+          'app/app-final.js': `const aFunction = require('./dep');const a = aFunction(1);`,
+          'src/dep.js': `module.exports = function(a){return a + 1;};`,
+          'package.json': fx.packageJson({
+            entry: './app-final.js'
           })
-          .execute(buildConst, ['--context=app']);
+        })
+        .execute(buildConst, ['--context=app']);
 
       expect(res.code).to.equal(0);
       expect(test.list('dist/statics')).to.contain('app.bundle.js');
@@ -379,14 +513,14 @@ describe('Aggregator: Build', () => {
 
     it('should support single entry point in package.json', () => {
       const res = test
-          .setup({
-            'src/app1.js': `const thisIsWorks = true;`,
-            'package.json': fx.packageJson({
-              entry: './app1.js'
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/app1.js': `const thisIsWorks = true;`,
+          'package.json': fx.packageJson({
+            entry: './app1.js'
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/statics/app.bundle.js')).to.contain('thisIsWorks');
@@ -394,18 +528,18 @@ describe('Aggregator: Build', () => {
 
     it('should support multiple entry points in package.json', () => {
       const res = test
-          .setup({
-            'src/app1.js': `const thisIsWorks = true;`,
-            'src/app2.js': `const hello = "world";`,
-            'package.json': fx.packageJson({
-              entry: {
-                first: './app1.js',
-                second: './app2.js'
-              }
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/app1.js': `const thisIsWorks = true;`,
+          'src/app2.js': `const hello = "world";`,
+          'package.json': fx.packageJson({
+            entry: {
+              first: './app1.js',
+              second: './app2.js'
+            }
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/statics/first.bundle.js')).to.contain('thisIsWorks');
@@ -442,15 +576,15 @@ describe('Aggregator: Build', () => {
 
     it('should create sourceMaps for both bundle and specs', () => {
       const res = test
-          .setup({
-            'src/app.js': `const thisIsWorks = true;`,
-            'src/app.spec.js': `const thisIsWorksAgain = true;`,
-            'package.json': fx.packageJson({
-              entry: './app.js'
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/app.js': `const thisIsWorks = true;`,
+          'src/app.spec.js': `const thisIsWorksAgain = true;`,
+          'package.json': fx.packageJson({
+            entry: './app.js'
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
 
@@ -460,15 +594,15 @@ describe('Aggregator: Build', () => {
 
     it('should bundle the app given importing json file', () => {
       test
-          .setup({
-            'src/app.js': `require('./some.json')`,
-            'src/some.json': `{"json-content": 42}`,
-            'package.json': fx.packageJson({
-              entry: './app.js'
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/app.js': `require('./some.json')`,
+          'src/some.json': `{"json-content": 42}`,
+          'package.json': fx.packageJson({
+            entry: './app.js'
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(test.content('dist/statics/app.bundle.js')).to.contain(`"json-content": 42`);
     });
@@ -477,12 +611,12 @@ describe('Aggregator: Build', () => {
       this.timeout(120000); // 2min, may be even shorter
 
       const res = test
-          .setup({
-            'src/app.js': `const thisIsWorks = true;`,
-            'src/app.spec.js': `const thisIsWorksAgain = true;`,
-            '.babelrc': `{"plugins": ["transform-es2015-block-scoping"]}`,
-            'pom.xml': fx.pom(),
-            'package.json': `{\n
+        .setup({
+          'src/app.js': `const thisIsWorks = true;`,
+          'src/app.spec.js': `const thisIsWorksAgain = true;`,
+          '.babelrc': `{"plugins": ["transform-es2015-block-scoping"]}`,
+          'pom.xml': fx.pom(),
+          'package.json': `{\n
               "name": "a",\n
               "version": "1.0.4",\n
               "dependencies": {\n
@@ -492,8 +626,8 @@ describe('Aggregator: Build', () => {
                 "entry": "./app.js"
               }
             }`
-          }, [hooks.installDependencies])
-          .execute(buildConst);
+        }, [hooks.installDependencies])
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
 
@@ -562,7 +696,7 @@ describe('Aggregator: Build', () => {
       expect(test.list('dist/statics')).to.contain('app.bundle.js');
       expect(test.list('dist/statics')).to.contain('app.bundle.min.js');
 
-      expect(test.list('dist/statics')).to.contain('app.bundle.min.js.map');
+      expect(test.list('dist/statics')).to.contain('app.bundle.js.map');
       expect(test.list('dist/statics')).to.contain('app.bundle.min.js.map');
     });
   });
@@ -573,12 +707,12 @@ describe('Aggregator: Build', () => {
 
     it.skip('should generate a bundle with css', () => {
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./style.scss\');',
-            'src/style.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson({separateCss: false})
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': 'require(\'./style.scss\');',
+          'src/style.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson({separateCss: false})
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/statics/app.bundle.js')).to.contain('.a .b');
@@ -586,12 +720,12 @@ describe('Aggregator: Build', () => {
 
     it.skip('should fail with exit code 1', () => {
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./style1.scss\');',
-            'src/style.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': 'require(\'./style1.scss\');',
+          'src/style.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(1);
       expect(test.list('dist', '-R')).to.not.include('statics/app.bundle.js');
@@ -614,27 +748,27 @@ describe('Aggregator: Build', () => {
 
     it('should create a separate css file for each entry', () => {
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./client-styles.scss\');',
-            'src/settings.js': 'require(\'./settings-styles.scss\');',
-            'src/client-styles.scss': `.a {.b {color: red;}}`,
-            'src/settings-styles.scss': `.c {.d {color: purple;}}`,
-            'package.json': fx.packageJson({entry: {app: './client.js', settings: './settings.js'}}),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': 'require(\'./client-styles.scss\');',
+          'src/settings.js': 'require(\'./settings-styles.scss\');',
+          'src/client-styles.scss': `.a {.b {color: red;}}`,
+          'src/settings-styles.scss': `.c {.d {color: purple;}}`,
+          'package.json': fx.packageJson({entry: {app: './client.js', settings: './settings.js'}}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
       expect(res.code).to.equal(0);
       expect(test.list('./dist/statics')).to.contain.members(['app.css', 'settings.css']);
     });
 
     it.skip('should generate css modules on bundle', () => {
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./styles/my-file.scss\');',
-            'src/styles/my-file.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': 'require(\'./styles/my-file.scss\');',
+          'src/styles/my-file.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content(`dist/${defaultOutput}/app.bundle.js`)).to.contain('.styles-__my-file__a__');
@@ -644,13 +778,13 @@ describe('Aggregator: Build', () => {
     it('should generate css modules on separate css file', () => {
       const regex = /\.styles-my-file__a__.{5}\s.styles-my-file__b__.{5}\s{/;
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./styles/my-file.scss\');',
-            'src/styles/my-file.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson({cssModules: true, separateCss: true}),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': 'require(\'./styles/my-file.scss\');',
+          'src/styles/my-file.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson({cssModules: true, separateCss: true}),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content(`dist/${defaultOutput}/app.bundle.js`)).not.to.match(regex);
@@ -659,21 +793,21 @@ describe('Aggregator: Build', () => {
 
     it.skip('should generate a bundle with svg/images', () => {
       const res = test
-          .setup({
-            'src/client.js': 'require(\'./style.scss\');',
-            'src/style.scss': `.button {
+        .setup({
+          'src/client.js': 'require(\'./style.scss\');',
+          'src/style.scss': `.button {
                                 background: url("./icon.svg") no-repeat center center;
                                 background: url("./image.png") no-repeat center center;
                                 background: url("./image.jpg") no-repeat center center;
                                 background: url("./image.gif") no-repeat center center;
                               }`,
-            'src/icon.svg': '',
-            'src/image.gif': '',
-            'src/image.jpg': '',
-            'src/image.png': '',
-            'package.json': fx.packageJson({separateCss: false})
-          })
-          .execute(buildConst);
+          'src/icon.svg': '',
+          'src/image.gif': '',
+          'src/image.jpg': '',
+          'src/image.png': '',
+          'package.json': fx.packageJson({separateCss: false})
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content(`dist/${defaultOutput}/app.bundle.js`)).to.match(/icon.\w+.svg/g);
@@ -787,13 +921,13 @@ describe('Aggregator: Build', () => {
 
     it('should generate a bundle', () => {
       const res = test
-          .setup({
-            'src/client.js': `const add1 = a => {return a + 1;};module.exports = add1;`,
-            'src/app.spec.js': `const add1 = require('./client');const a = add1(1);`,
-            'src/appTwo.spec.js': `const add1 = require('./client');const b = add1(2);`,
-            'package.json': fx.packageJson()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': `const add1 = a => {return a + 1;};module.exports = add1;`,
+          'src/app.spec.js': `const add1 = require('./client');const a = add1(1);`,
+          'src/appTwo.spec.js': `const add1 = require('./client');const b = add1(2);`,
+          'package.json': fx.packageJson()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.list('dist')).to.contain('specs.bundle.js');
@@ -804,17 +938,17 @@ describe('Aggregator: Build', () => {
 
     it('should consider custom specs.browser globs if configured', () => {
       const res = test
-          .setup({
-            'src/client.js': '',
-            'some/other/app.js': `const add1 = a => { return a + 1; }; module.exports = add1;`,
-            'some/other/app.glob.js': `const add1 = require("./app"); const a = add1(2);`,
-            'package.json': fx.packageJson({
-              specs: {
-                browser: 'some/other/*.glob.js'
-              }
-            })
+        .setup({
+          'src/client.js': '',
+          'some/other/app.js': `const add1 = a => { return a + 1; }; module.exports = add1;`,
+          'some/other/app.glob.js': `const add1 = require("./app"); const a = add1(2);`,
+          'package.json': fx.packageJson({
+            specs: {
+              browser: 'some/other/*.glob.js'
+            }
           })
-          .execute(buildConst);
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/specs.bundle.js')).to.contain('const a = add1(2);');
@@ -823,13 +957,13 @@ describe('Aggregator: Build', () => {
 
     it('should generate a bundle with css', () => {
       const res = test
-          .setup({
-            'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
-            'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
-            'src/style.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson({separateCss: false})
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
+          'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
+          'src/style.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson({separateCss: false})
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/specs.bundle.js')).to.contain('.a .b');
@@ -837,13 +971,13 @@ describe('Aggregator: Build', () => {
 
     it('should separate css from bundle', () => {
       const res = test
-          .setup({
-            'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
-            'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
-            'src/style.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson({separateCss: true})
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
+          'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
+          'src/style.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson({separateCss: true})
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/statics/app.bundle.js')).not.to.contain('.a .b');
@@ -853,13 +987,13 @@ describe('Aggregator: Build', () => {
 
     it('should separate css from bundle by default', () => {
       const res = test
-          .setup({
-            'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
-            'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
-            'src/style.scss': `.a {.b {color: red;}}`,
-            'package.json': fx.packageJson()
-          })
-          .execute(buildConst);
+        .setup({
+          'src/client.js': `require('./style.css');const add1 = a => {return a + 1;};module.exports = add1;`,
+          'src/app.spec.js': `const add1 = require('./client');const a = add1(2);`,
+          'src/style.scss': `.a {.b {color: red;}}`,
+          'package.json': fx.packageJson()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('dist/statics/app.bundle.js')).not.to.contain('.a .b');
@@ -876,14 +1010,14 @@ describe('Aggregator: Build', () => {
 
     it('should copy files from assets folder', () => {
       const res = test
-         .setup({
-           'app/assets/some-file': 'a',
-           'src/assets/some-file': 'a',
-           'test/assets/some-file': 'a',
-           'package.json': fx.packageJson(),
-           'pom.xml': fx.pom()
-         })
-         .execute(buildConst);
+        .setup({
+          'app/assets/some-file': 'a',
+          'src/assets/some-file': 'a',
+          'test/assets/some-file': 'a',
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
 
@@ -896,24 +1030,24 @@ describe('Aggregator: Build', () => {
       const types = ['ejs', 'html', 'vm'];
 
       const paths = ['app', 'src', 'test']
-         .reduce((result, dir) => {
-           types.forEach(type => result.push([dir, type]));
-           return result;
-         }, [])
-         .reduce((result, dirTypePair) =>
-             Object.assign(result, {[`${dirTypePair[0]}/a.${dirTypePair[1]}`]: 'a'}), {});
+        .reduce((result, dir) => {
+          types.forEach(type => result.push([dir, type]));
+          return result;
+        }, [])
+        .reduce((result, dirTypePair) =>
+          Object.assign(result, {[`${dirTypePair[0]}/a.${dirTypePair[1]}`]: 'a'}), {});
 
       const res = test
-         .setup(Object.assign({
-           'package.json': fx.packageJson(),
-           'pom.xml': fx.pom()
-         }, paths))
-         .execute(buildConst);
+        .setup(Object.assign({
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        }, paths))
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       dirs.forEach(dir =>
-       expect(test.list(`dist/${dir}`).sort()).to.eql(types.map(type => `a.${type}`).sort())
-     );
+        expect(test.list(`dist/${dir}`).sort()).to.eql(types.map(type => `a.${type}`).sort())
+      );
     });
 
     it('should copy files from assets in specified directories when --dirs flag is raised', () => {
@@ -945,19 +1079,21 @@ describe('Aggregator: Build', () => {
       expect(test.list(`dist/statics1/assets`)).to.include('some-file');
     });
 
-    it('should copy files from assets folder directly to the output directory and only from the context directory when the --context flag is set', () => {
-      const res = test.setup({
-        'app/assets/some-file': 'a',
-        'src/assets/should-not-be-here': 'a',
-        'package.json': fx.packageJson(),
-        'pom.xml': fx.pom()
-      }).execute(buildConst, ['--output=statics', '--context=app']);
+    it(
+      'should copy files from assets folder directly to the output directory and only from the context directory when the --context flag is set',
+      () => {
+        const res = test.setup({
+          'app/assets/some-file': 'a',
+          'src/assets/should-not-be-here': 'a',
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        }).execute(buildConst, ['--output=statics', '--context=app']);
 
-      expect(res.code).to.equal(0);
-      expect(test.list(`dist/statics/assets`)).to.include('some-file');
-      expect(test.list(`dist/statics/assets`)).to.not.include('should-not-be-here');
-      expect(test.list(`dist/statics/`)).to.not.include('src');
-    });
+        expect(res.code).to.equal(0);
+        expect(test.list(`dist/statics/assets`)).to.include('some-file');
+        expect(test.list(`dist/statics/assets`)).to.not.include('should-not-be-here');
+        expect(test.list(`dist/statics/`)).to.not.include('src');
+      });
 
     it('should copy html assets to dist and to statics', () => {
       const res = test.setup({
@@ -999,13 +1135,13 @@ describe('Aggregator: Build', () => {
 
     it('should create tar.gz.xml based on client project name', () => {
       const res = test
-          .setup({
-            'package.json': fx.packageJson({
-              clientProjectName: 'some-client-proj'
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'package.json': fx.packageJson({
+            clientProjectName: 'some-client-proj'
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('maven/assembly/tar.gz.xml').replace(/\s/g, '')).to.contain(`
@@ -1033,13 +1169,13 @@ describe('Aggregator: Build', () => {
 
     it('should create tar.gz.xml for universal app, using default directory for statics', () => {
       const res = test
-          .setup({
-            'package.json': fx.packageJson({
-              universalProject: true
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+        .setup({
+          'package.json': fx.packageJson({
+            universalProject: true
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('maven/assembly/tar.gz.xml').replace(/\s/g, '')).to.contain(`
@@ -1067,18 +1203,18 @@ describe('Aggregator: Build', () => {
 
     it('should create tar.gz.xml for universal app, using different directory for statics', () => {
       const res = test
-          .setup({
-            'package.json': fx.packageJson({
-              universalProject: true,
-              servers: {
-                cdn: {
-                  dir: 'dist/bla'
-                }
+        .setup({
+          'package.json': fx.packageJson({
+            universalProject: true,
+            servers: {
+              cdn: {
+                dir: 'dist/bla'
               }
-            }),
-            'pom.xml': fx.pom()
-          })
-          .execute(buildConst);
+            }
+          }),
+          'pom.xml': fx.pom()
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
       expect(test.content('maven/assembly/tar.gz.xml').replace(/\s/g, '')).to.contain(`
@@ -1106,22 +1242,22 @@ describe('Aggregator: Build', () => {
 
     it('should not fail if there is no "tarGZLocation"', () => {
       const res = test
-          .setup({
-            'package.json': fx.packageJson({
-              universalProject: true,
-              servers: {
-                cdn: {
-                  dir: 'dist/bla'
-                }
+        .setup({
+          'package.json': fx.packageJson({
+            universalProject: true,
+            servers: {
+              cdn: {
+                dir: 'dist/bla'
               }
-            }),
-            'pom.xml': `
+            }
+          }),
+          'pom.xml': `
               <?xml version="1.0" encoding="UTF-8"?>
               <project>
               </project>
             `
-          })
-          .execute(buildConst);
+        })
+        .execute(buildConst);
 
       expect(res.code).to.equal(0);
     });

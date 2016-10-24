@@ -25,7 +25,8 @@ const config = {
       require('../lib/loaders/babel')(),
       require('../lib/loaders/typescript')(),
       require('../lib/loaders/images')(),
-      require('../lib/loaders/json')()
+      require('../lib/loaders/json')(),
+      require('../lib/loaders/html')()
     ]
   },
 

@@ -33,7 +33,8 @@ module.exports = {
   },
   separateCss: () => getConfig('separateCss', true),
   cssModules: () => getConfig('cssModules'),
-  externals: () => getConfig('externals')
+  externals: () => getConfig('externals'),
+  indexFile: () => getConfig('index')
 };
 
 function getConfig(key, defaultVal) {

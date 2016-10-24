@@ -127,5 +127,16 @@ module.exports = {
     server.listen(port, hostname, () => {
       console.log('Running a server...');
     });
-  `
+  `,
+
+  gif: (format = 'buffer') => {
+    const base64 = 'R0lGODlhAQABAIAAAAUEBAAAACwAAAAAAQABAAACAkQBADs=';
+    switch (format) {
+      case 'base64':
+        return base64;
+      case 'buffer':
+      default:
+        return Buffer.from(base64, 'base64');
+    }
+  }
 };
