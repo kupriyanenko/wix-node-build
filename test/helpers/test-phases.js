@@ -1,71 +1,86 @@
 'use strict';
-
+const _ = require('lodash');
 const process = require('process');
 const path = require('path');
 const sh = require('shelljs');
 const spawn = require('child_process').spawn;
 const cwd = path.join(__dirname, '..', '..');
+const psTree = require('ps-tree');
 
 class Test {
-  constructor() {
-    const args = Array.prototype.slice.call(arguments);
-    const script = typeof args[0] === 'string' && args[0];
-    const env = typeof args[0] === 'object' ? args[0] : args[1];
+  constructor(script, env) {
+    if (typeof script === 'object') {
+      env = script;
+      script = undefined;
+    }
 
     this.script = script || path.join(cwd, 'wix-node-build.js');
     this.env = Object.assign({}, process.env, env);
     this.child = null;
     this.stdout = '';
+    this.stderr = '';
   }
 
-  setup(tree, hooks) {
-    const tmp = this.tmp || (this.tmp = path.join(sh.tempdir().toString(), new Date().getTime().toString()));
+  setup(tree, hooks = []) {
+    const tmp = this.tmp = this.tmp || path.join(sh.tempdir().toString(), new Date().getTime().toString());
     const flat = flattenTree(tree);
     Object.keys(flat).forEach(file => {
       this.write(file, flat[file]);
     });
-    (hooks || []).forEach(hook => hook(tmp, cwd));
+    hooks.forEach(hook => hook(tmp, cwd));
     return this;
   }
 
   spawn(command, options) {
-    if (this.hasTmp()) {
-      try {
-        options = options || [];
-        options = Array.isArray(options) ? options : options.split(' ');
-        // this.child = spawn('node', [`${this.script}`, `${command}`].concat(options), {cwd: this.tmp, stdio: 'inherit'});
-        this.child = spawn('node', [`${this.script}`, `${command}`].concat(options), {cwd: this.tmp});
-        this.child.stdout.on('data', buffer => {
-          this.stdout += buffer.toString();
-        });
-        return this.child;
-      } catch (e) {
-        console.log(`Error running ${this.script} ${command}: ${e}`); // TODO: Use logger?
-        return null;
-      }
+    if (!this.hasTmp()) {
+      throw new Error('Test was not setup');
     }
-    return null;
+    if (this.child) {
+      throw new Error('Previous child has not teardown');
+    }
+    try {
+      options = options || [];
+      options = Array.isArray(options) ? options : options.split(' ');
+      // this.child = spawn('node', [`${this.script}`, `${command}`].concat(options), {cwd: this.tmp, stdio: 'inherit'});
+      const args = this.args = [`${this.script}`, `${command}`].concat(options);
+      const child = this.child = spawn('node', args, {cwd: this.tmp});
+      child.stdout.on('data', buffer => {
+        this.stdout += buffer.toString();
+      });
+      child.stderr.on('data', buffer => {
+        this.stderr += buffer.toString();
+      });
+
+      return child;
+    } catch (e) {
+      console.log(`Error running ${this.script} ${command}: ${e}`); // TODO: Use logger?
+      return null;
+    }
   }
 
   execute(command, options, environment) {
     const args = [command].concat(options);
     const env = Object.assign({}, this.env, environment || {});
     if (this.hasTmp()) {
-      return sh.exec(`node '${this.script}' ${args.join(' ')}`, {cwd: this.tmp, env});
+      this.child = sh.exec(`node "${this.script}" ${args.join(' ')}`, {cwd: this.tmp, env});
+      return this.child;
     }
   }
 
-  teardown() {
-    if (this.hasTmp()) {
-      if (this.child) {
-        // this.child.kill('SIGKILL');
-        this.child = null;
-        this.stdout = '';
-      }
-
-      sh.rm('-rf', this.tmp);
+  teardown(keepDir = false) {
+    if (!this.hasTmp() || !this.child) {
+      return Promise.resolve();
     }
-    return this;
+    return this.killSpawnProcessAndHidChildren()
+      .then(() => {
+        this.child = null;
+        this.args = null;
+        this.stdout = '';
+        this.stderr = '';
+        if (!keepDir) {
+          sh.rm('-rf', this.tmp);
+        }
+      });
   }
 
   hasTmp() {
@@ -104,6 +119,24 @@ class Test {
     const args = (options ? [options] : []).concat(loc);
     return Array.from(sh.ls.apply(sh, args));
   }
+
+  killSpawnProcessAndHidChildren() {
+    if (!this.child) {
+      return Promise.resolve();
+    }
+
+    const pid = this.child.pid;
+    return psTreePromised(pid)
+      .then(children => {
+        [pid].concat(children.map(p => p.PID)).forEach(tpid => {
+          try {
+            process.kill(tpid, 'SIGKILL');
+          } catch (e) {
+          }
+        });
+      });
+  }
+
 }
 
 function flattenTree(tree, prefix) {
@@ -111,13 +144,25 @@ function flattenTree(tree, prefix) {
   prefix = prefix ? prefix + path.sep : '';
   Object.keys(tree).forEach(key => {
     const value = tree[key];
-    if (typeof value === 'string') {
-      result[prefix + key] = value;
-    } else {
+    if (_.isPlainObject(value)) {
       result = Object.assign(result, flattenTree(value, prefix + key));
+    } else {
+      result[prefix + key] = value;
     }
   });
   return result;
+}
+
+function psTreePromised(pid) {
+  return new Promise(function (resolve, reject) {
+    psTree(pid, (err, children) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(children);
+    });
+  });
 }
 
 module.exports = {

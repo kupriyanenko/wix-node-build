@@ -1,32 +1,48 @@
 'use strict';
 
-const _ = require('lodash/fp');
+const fp = require('lodash/fp');
 const expect = require('chai').expect;
-const psTree = require('ps-tree');
+
 const tp = require('./helpers/test-phases');
 const fx = require('./helpers/fixtures');
 const fetch = require('node-fetch');
 const retryPromise = require('retry-promise').default;
 const hooks = require('./helpers/hooks');
+const logTest = require('./helpers/log-test');
 
 describe('Aggregator: start', () => {
-  let test, child;
+  let test;
 
   beforeEach(() => {
     test = tp.create();
-    child = null;
   });
 
-  afterEach(done => {
-    test.teardown();
-    killSpawnProcessAndHidChildren(done);
+  afterEach('check stderr', function () {
+    expect(test.stderr.trim()).to.be.empty;
   });
+
+  afterEach('log on fail', function () {
+    if (this.currentTest.state === 'failed') {
+      logTest(test);
+    }
+  });
+
+  afterEach('kill spawned', function () {
+    if (this.currentTest.state === 'failed') {
+      console.log('Tmp dir is', test.tmp);
+      console.log('node', test.args.join(' '));
+      return test.teardown(process.env.KEEP_ON_FAIL === 'true');
+    }
+    return test.teardown();
+  });
+
 
   describe('tests', function () {
     it('should run tests initially', () => {
-      child = test
+      test
         .setup({
           'src/test.spec.js': '',
+          'index.js': `console.log('hello world!')`,
           'src/client.js': '',
           'entry.js': '',
           'package.json': fx.packageJson(),
@@ -42,7 +58,7 @@ describe('Aggregator: start', () => {
 
   describe('--entry-point', () => {
     it('should run the entry point provided', () => {
-      child = test
+      test
         .setup({
           'src/client.js': '',
           'entry.js': `console.log('hello world!')`,
@@ -57,8 +73,9 @@ describe('Aggregator: start', () => {
     });
 
     it('should run index.js by default', () => {
-      child = test
+      test
         .setup({
+          'src/test.spec.js': '',
           'src/client.js': '',
           'index.js': `console.log('hello world!')`,
           'package.json': fx.packageJson(),
@@ -70,16 +87,40 @@ describe('Aggregator: start', () => {
         expect(test.content('target/server.log')).to.contains('hello world!')
       );
     });
+
+    it('should show server errors', function () {
+      this.timeout(30000);
+      test
+        .setup({
+          'src/test.spec.js': '',
+          'src/client.js': '',
+          'index.js': `console.error('error message!'); require('sa')`,
+          'package.json': fx.packageJson(),
+          'pom.xml': fx.pom()
+        })
+        .spawn('start');
+
+      return checkServerLogCreated()
+        .then(() => {
+          expect(test.content('target/server.log')).to.contains('error message!');
+          expect(test.stderr)
+            .to.contain('error message!')
+            .to.contain(`Cannot find module 'sa'`);
+          test.stderr = '';
+        })
+        .then(() => test.modify('index.js', fx.httpServer('hello')))
+        .then(() => checkServerIsRespondingWith('hello'));
+    });
   });
 
   describe('--no-server', () => {
     it('should not start a server if --no-server is passed', () => {
-      child = test
-        .setup({
+      test
+        .setup(getFiles({
           'dist/statics/image.png': '',
           'index.js': `console.log('should not run');`,
           'package.json': fx.packageJson({servers: {cdn: {port: 3005}}})
-        })
+        }))
         .spawn('start', ['--no-server']);
 
       return cdnIsServing('image.png')
@@ -87,60 +128,80 @@ describe('Aggregator: start', () => {
     });
   });
 
+  describe('--hot', () => {
+    it('should create bundle with enabled hot module replacement', () => {
+      test
+        .setup(getFiles({
+          'src/client.js': `console.log('client-content');`,
+          'index.js': `console.log('should run');`,
+          'package.json': fx.packageJson()
+        }))
+        .spawn('start', ['--hot']);
+
+      return fetchCDN('/app.bundle.js')
+        .then(resp => resp.text())
+        .then(file => {
+          file = file.replace(/\s+/g, ' ');
+          expect(file).to.include(`if (false) { throw new Error("[HMR] Hot Module Replacement is disabled."); }`)
+            .and.include(`console.log('client-content');`)
+            .and.not.include('Cannot find module');
+        });
+    });
+  });
+
   describe('CDN server', () => {
     it('should run cdn server with default dir', () => {
-      child = test
-        .setup({
+      test
+        .setup(getFiles({
           'dist/statics/test.json': '{a: 1}',
           'dist/index.js': 'var a = 1;',
           'package.json': fx.packageJson({servers: {cdn: {port: 3005}}})
-        })
+        }))
         .spawn('start');
 
       return cdnIsServing('test.json');
     });
 
     it('should run cdn server with configured dir', () => {
-      child = test
-        .setup({
+      test
+        .setup(getFiles({
           'dist/statics/test.json': '{a: 1}',
           'dist/index.js': 'var a = 1;',
           'package.json': fx.packageJson({servers: {cdn: {port: 3005, dir: 'dist/statics'}}})
-        })
+        }))
         .spawn('start');
 
       return cdnIsServing('test.json');
     });
 
     it('should run cdn server from node_modules, on n-build project, using default dir', () => {
-      child = test
-        .setup({
+      test
+        .setup(getFiles({
           'node_modules/my-client-project/dist/test.json': '{a: 1}',
           'dist/index.js': 'var a = 1;',
           'package.json': fx.packageJson({clientProjectName: 'my-client-project', servers: {cdn: {port: 3005}}})
-        })
+        }))
         .spawn('start');
 
       return cdnIsServing('test.json');
     });
 
     it('should run cdn server from node_modules, on n-build project, using configured dir', () => {
-      child = test
-        .setup({
+      test
+        .setup(getFiles({
           'node_modules/my-client-project/dist/statics/test.json': '{a: 1}',
           'dist/index.js': 'var a = 1;',
-          'package.json': fx.packageJson({clientProjectName: 'my-client-project', servers: {cdn: {port: 3005, dir: 'dist/statics'}}})
-        })
+          'package.json': fx.packageJson(
+            {clientProjectName: 'my-client-project', servers: {cdn: {port: 3005, dir: 'dist/statics'}}})
+        }))
         .spawn('start');
 
       return cdnIsServing('test.json');
     });
 
     it('should support cross origin requests headers', () => {
-      child = test
-        .setup({
-          'package.json': fx.packageJson()
-        })
+      test
+        .setup(getFiles())
         .spawn('start');
 
 
@@ -156,7 +217,7 @@ describe('Aggregator: start', () => {
 
     describe('when using typescript', () => {
       it(`should rebuild and restart server after a file has been changed with typescript files`, () => {
-        child = test
+        test
           .setup({
             'target/server.log': '', // TODO: understand why test fails with Error: ENOENT: no such file or directory, open 'target/server.log'
             'tsconfig.json': fx.tsconfig(),
@@ -164,6 +225,7 @@ describe('Aggregator: start', () => {
             'src/config.ts': '',
             'src/client.ts': '',
             'index.js': `require('./dist/src/server')`,
+            'src/test.spec.js': `console.log('test.spec.js')`,
             'package.json': fx.packageJson(),
             'pom.xml': fx.pom()
           })
@@ -178,9 +240,10 @@ describe('Aggregator: start', () => {
 
     describe('when using es6', () => {
       it(`should rebuild and restart server after a file has been changed`, () => {
-        child = test
+        test
           .setup({
             'src/server.js': fx.httpServer('hello'),
+            'src/test.spec.js': '',
             'src/config.js': '',
             'src/client.js': '',
             'index.js': `require('./src/server')`,
@@ -204,7 +267,7 @@ describe('Aggregator: start', () => {
         'src/menu.js': 'module.exports.create = function () {console.log(\'Initializing the menu!\')}',
         'package.json': fx.pkgJsonWithBuild()
       }, [hooks.linkWixNodeBuild]).execute('build', '--bundle');
-      child = test.spawn('start', '-w');
+      test.spawn('start', '-w');
 
       return checkServerIsUp()
         .then(() => test.modify('src/client.js', content => 'const menu = ' + content))
@@ -216,36 +279,25 @@ describe('Aggregator: start', () => {
     });
   });
 
-  function killSpawnProcessAndHidChildren(done) {
-    if (!child) {
-      return done();
-    }
-
-    const pid = child.pid;
-
-    psTree(pid, (err /*eslint handle-callback-err: 0*/, children) => {
-      [pid].concat(children.map(p => p.PID)).forEach(tpid => {
-        try {
-          process.kill(tpid, 'SIGKILL');
-        } catch (e) {}
-      });
-
-      child = null;
-      done();
-    });
+  function getFiles(overrides) {
+    return fp.defaults({
+      'src/test.spec.js': `console.log('test.spec.js')`,
+      'src/client.js': `console.log('client.js')`,
+      'index.js': `console.log('running internal server');`,
+      'package.json': fx.packageJson()
+    })(overrides);
   }
 
   function checkServerLogCreated() {
-    return retryPromise({backoff: 100}, () =>
+    return retryPromise({backoff: 400}, () =>
       test.contains('target/server.log') ?
         Promise.resolve() :
-        Promise.reject()
+        Promise.reject(new Error('Log was not created'))
     );
   }
 
-  function fetchCDN(port) {
-    port = port || 3200;
-    return retryPromise({backoff: 100}, () => fetch(`http://localhost:${port}/`));
+  function fetchCDN(path = '/', port = 3200) {
+    return retryPromise({backoff: 100}, () => fetch(`http://localhost:${port}${path}`));
   }
 
   function cdnIsServing(name) {
@@ -254,15 +306,15 @@ describe('Aggregator: start', () => {
   }
 
   function checkServerIsRespondingWith(expected) {
-    return retryPromise({backoff: 1000}, () =>
+    return retryPromise({backoff: 500}, () =>
       fetch(`http://localhost:6666/`)
         .then(res => res.text())
-        .then(body => body === expected ? Promise.resolve() : Promise.reject())
+        .then(body => body === expected ? Promise.resolve() : Promise.reject(new Error(`Did not met ${expected}`)))
     );
   }
 
   function checkServerIsUp(opts) {
-    return retryPromise(_.merge({backoff: 100}, opts), () =>
+    return retryPromise(fp.merge({backoff: 100}, opts), () =>
       fetch(`http://localhost:6666/`)
     );
   }

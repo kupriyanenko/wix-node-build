@@ -86,6 +86,7 @@
     "url-loader": "^0.5.7",
     "webpack": "^1.13.1",
     "webpack-dev-middleware": "^1.6.1",
+    "webpack-hot-middleware": "^2.13.0",
     "wnpm-ci": "latest",
     "xml2js": "^0.4.16"
   },
