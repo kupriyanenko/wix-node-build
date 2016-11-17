@@ -13,7 +13,8 @@ const config = {
 
   resolve: {
     root: context,
-    extensions: ['', '.ts', '.js', '.tsx', '.jsx']
+    extensions: ['', '.ts', '.js', '.tsx', '.jsx'],
+    modulesDirectories: ['src', 'node_modules']
   },
 
   resolveLoader: {

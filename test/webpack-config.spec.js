@@ -3,6 +3,7 @@
 const tp = require('./helpers/test-phases');
 const fx = require('./helpers/fixtures');
 const expect = require('chai').expect;
+const hooks = require('./helpers/hooks');
 
 describe('Webpack basic configs', () => {
   let res, test;
@@ -50,6 +51,29 @@ describe('Webpack basic configs', () => {
       it('should generate source maps', () => {
         expect(test.content('dist/statics/app.bundle.js')).to.contain('//# sourceMappingURL=app.bundle.js.map');
         expect(test.list('dist/statics/')).to.contain('app.bundle.js.map');
+      });
+
+      it('should resolve "absolute" paths when src folder is the root', function () {
+        this.timeout(30000);
+        test.setup({
+          '.babelrc': `{"presets": ["es2015"]}`,
+          'src/components/modules/submodule/index.js': 'export const component = 123;',
+          'src/redux/global/index.js': 'export const reducer = 12121212;',
+          'src/client/components/sidebar/index.js': `import * as reducers from 'redux/global';
+                                                      export const sidebar = {something: 987};`,
+          'src/client.js': `import {component} from 'components/modules/submodule';
+                            import * as sidebar from 'client/components/sidebar'`,
+          'package.json': `{
+                            "name": "a",\n
+                            "version": "1.0.4",\n
+                            "dependencies": {\n
+                              "babel-preset-es2015": "latest"\n
+                            }
+                          }`,
+          'pom.xml': fx.pom()
+        }, [hooks.installDependencies]).execute('build');
+        expect(test.content('dist/statics/app.bundle.js')).to.contain('123');
+        expect(test.content('dist/statics/app.bundle.js')).to.contain('12121212');
       });
     });
 
