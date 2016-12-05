@@ -3,6 +3,8 @@
 const tp = require('./helpers/test-phases');
 const fx = require('./helpers/fixtures');
 const expect = require('chai').expect;
+const hooks = require('./helpers/hooks');
+
 
 describe('Webpack basic configs', () => {
   let res, test;
@@ -50,6 +52,19 @@ describe('Webpack basic configs', () => {
       it('should generate source maps', () => {
         expect(test.content('dist/statics/app.bundle.js')).to.contain('//# sourceMappingURL=app.bundle.js.map');
         expect(test.list('dist/statics/')).to.contain('app.bundle.js.map');
+      });
+
+      it('should resolve modules directory', function () {
+        test.setup({
+          '.babelrc': `{}`,
+          'src/component/sidebar/index.js': `module.exports =  { myComp: 123 };`,
+          'src/client.js': `const comp = require('component/sidebar');`,
+          'package.json': fx.packageJson({})
+        })
+        .execute('build');
+        console.log(test.content('dist/statics/app.bundle.js'));
+        expect(test.content('dist/statics/app.bundle.js')).to.contain('123');
+
       });
     });
 
