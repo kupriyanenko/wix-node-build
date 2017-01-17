@@ -1283,6 +1283,22 @@ describe('Aggregator: Build', () => {
 
       expect(test.list('.nvmrc').length).to.equal(0);
     });
+
+    it('should not update .nvmrc if user created .nvm.lock file', () => {
+      const nodeVersion = readFileSync(require.resolve('../templates/.nvmrc'), {encoding: 'utf-8'});
+      const res = test
+        .setup({
+          '.nvm.lock': '',
+          '.nvmrc': '999.999.999',
+          'package.json': fx.packageJson()
+        })
+        .execute('build', [], outsideTeamCity);
+
+      expect(res.code).to.be.equal(0);
+      expect(test.content('.nvmrc')).to.equal('999.999.999');
+    });
+
+
   });
 
   describe('petri specs', () => {
