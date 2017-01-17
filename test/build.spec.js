@@ -1274,6 +1274,19 @@ describe('Aggregator: Build', () => {
       expect(test.content('.nvmrc')).to.equal(nodeVersion);
     });
 
+    it('should not update .nvmrc if project has a higher version set in .nvmrc', () => {
+      const nodeVersion = readFileSync(require.resolve('../templates/.nvmrc'), {encoding: 'utf-8'});
+      const res = test
+        .setup({
+          '.nvmrc': '99.0.0',
+          'package.json': fx.packageJson()
+        })
+        .execute('build', [], outsideTeamCity);
+
+      expect(res.code).to.be.equal(0);
+      expect(test.content('.nvmrc')).to.equal('99.0.0');
+    });
+
     it('should not update .nvmrc inside TeamCity', () => {
       test
         .setup({
