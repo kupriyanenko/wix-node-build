@@ -1275,7 +1275,6 @@ describe('Aggregator: Build', () => {
     });
 
     it('should not update .nvmrc if project has a higher version set in .nvmrc', () => {
-      const nodeVersion = readFileSync(require.resolve('../templates/.nvmrc'), {encoding: 'utf-8'});
       const res = test
         .setup({
           '.nvmrc': '99.0.0',
