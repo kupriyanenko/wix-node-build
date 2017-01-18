@@ -4,7 +4,7 @@ const webpack = require('webpack');
 const path = require('path');
 const autoprefixer = require('autoprefixer');
 const {mergeByConcat, isSingleEntry} = require('../lib/utils');
-const webpackConfigCommon = require('./webpack.config.common');
+const getWebpackConfigCommon = require('./webpack.config.common');
 const projectConfig = require('./project');
 const DynamicPublicPath = require('../lib/plugins/dynamic-public-path');
 
@@ -13,7 +13,7 @@ const config = ({debug, separateCss = projectConfig.separateCss()} = {}) => {
   const tpaStyle = projectConfig.tpaStyle();
   const extractCSS = getExtractCss();
 
-  return mergeByConcat(webpackConfigCommon, {
+  return mergeByConcat(getWebpackConfigCommon(), {
     entry: getEntry(),
 
     module: {
