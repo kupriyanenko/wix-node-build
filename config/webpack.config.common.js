@@ -9,7 +9,9 @@ const config = {
 
   output: {
     path: path.resolve('./dist'),
-    pathinfo: true
+    pathinfo: true,
+    library: projectConfig.output.library(),
+    libraryTarget: projectConfig.output.libraryTarget()
   },
 
   resolve: {
