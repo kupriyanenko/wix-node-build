@@ -262,6 +262,32 @@ Note that this is not a recommended workflow. It can be very error prone:
 
 Anyway, if you don't have a better alternative you can pass array with module names in this property.
 
+##### `wix.output.library`
+
+If set, export the bundle as library. `wix.output.library` is the name.
+
+Use this if you are writing a library and want to publish it as single file.
+
+##### `wix.output.libraryTarget`
+
+Which format to export the library:
+
+`"var"` - Export by setting a variable: var Library = xxx (default)
+
+`"this"` - Export by setting a property of this: this["Library"] = xxx
+
+`"commonjs"` - Export by setting a property of exports: exports["Library"] = xxx
+
+`"commonjs2"` - Export by setting module.exports: module.exports = xxx
+
+`"amd"` - Export to AMD (optionally named - set the name via the library option)
+
+`"umd"` - Export to AMD, CommonJS2 or as property in root
+
+Default: `"var"`
+
+If `wix.output.library` is not set, but `wix.output.libraryTarget` is set to a value other than `var`, every property of the exported object is copied (Except `amd`, `commonjs2` and `umd`).
+
 ##Examples
 
 1. [React Fullstack Seed](https://github.com/wix/react-fullstack-seed)

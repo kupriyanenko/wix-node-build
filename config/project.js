@@ -19,6 +19,10 @@ module.exports = {
     node: () => getConfig('specs.node'),
     browser: () => getConfig('specs.browser')
   },
+  output: {
+    library: () => getConfig('output.library'),
+    libraryTarget: () => getConfig('output.libraryTarget', 'var')
+  },
   clientProjectName: () => getConfig('clientProjectName'),
   clientFilesPath: () => {
     const clientProjectName = getConfig('clientProjectName');
